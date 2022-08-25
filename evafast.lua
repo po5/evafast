@@ -30,7 +30,10 @@ local options = {
     multiply_modifier = false,
 
     -- Flash uosc timeline when seeking, ignore this if you're not using uosc
-    uosc_flash_on_seek = true
+    uosc_flash_on_seek = true,
+
+    -- Flash uosc speed bar when adjusting speed, ignore this if you're not using uosc
+    uosc_flash_on_speed = true
 }
 
 mp.options = require "mp.options"
@@ -65,7 +68,9 @@ local function adjust_speed()
         end
         if speed ~= old_speed then
             mp.set_property("speed", speed)
-            mp.command("script-binding uosc/flash-speed")
+            if options.uosc_flash_on_speed then
+                mp.command("script-binding uosc/flash-speed")
+            end
         end
         if speed == 1 then
             speed_timer:kill()
