@@ -50,10 +50,6 @@ local no_speedup = false
 local jumps_reset_speed = true
 
 local function adjust_speed()
-    if speed_timer == nil then
-        speed_timer = mp.add_periodic_timer(options.speed_interval, adjust_speed)
-    end
-
     local effective_speed_cap = (not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap
     local speed = mp.get_property_number("speed")
     local old_speed = speed
@@ -80,10 +76,14 @@ local function adjust_speed()
         end
     end
     if speed == 1 and effective_speed_cap ~= 1 then
-        speed_timer:kill()
-        speed_timer = nil
+        if speed_timer ~= nil then
+            speed_timer:kill()
+            speed_timer = nil
+        end
         repeated = false
         jumps_reset_speed = true
+    elseif speed_timer == nil then
+        speed_timer = mp.add_periodic_timer(options.speed_interval, adjust_speed)
     end
 end
 
