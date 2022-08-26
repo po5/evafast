@@ -30,6 +30,9 @@ local options = {
     -- Use much lower values than default e.g. speed_increase=0.05, speed_decrease=0.025
     multiply_modifier = false,
 
+    -- Show current speed and seek actions on the osd
+    osd_message = false,
+
     -- Flash uosc timeline when seeking, ignore this if you're not using uosc
     uosc_flash_on_seek = true,
 
@@ -72,6 +75,9 @@ local function adjust_speed()
         if options.uosc_flash_on_speed then
             mp.command("script-binding uosc/flash-speed")
         end
+        if options.osd_message then
+            mp.osd_message(("▶▶ x%.1f"):format(speed))
+        end
     end
     if speed == 1 then
         speed_timer:kill()
@@ -98,6 +104,9 @@ local function evafast(keypress)
     end
 
     if keypress["event"] == "down" then
+        if options.osd_message and not repeated then
+            mp.osd_message("▶▶")
+        end
         repeated = false
         speedup = true
     elseif (keypress["event"] == "up" and not repeated) or keypress["event"] == "press" then
