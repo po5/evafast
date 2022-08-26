@@ -7,9 +7,10 @@
 -- Also supports toggling fastforward mode with a keypress.
 -- Adjust --input-ar-delay to define when to start fastforwarding.
 -- Define --hr-seek if you want accurate seeking.
+-- If you just want a nicer fastforward.lua without hybrid key behavior, set seek_distance to 0.
 
 local options = {
-    -- How far to jump on press
+    -- How far to jump on press, set to 0 to disable seeking and force fastforward
     seek_distance = 5,
 
     -- Playback speed modifier, applied once every speed_interval until cap is reached
@@ -48,36 +49,35 @@ local jumps_reset_speed = true
 local function adjust_speed()
     if speed_timer == nil then
         speed_timer = mp.add_periodic_timer(options.speed_interval, adjust_speed)
-        adjust_speed()
-    else
-        local effective_speed_cap = (not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap
-        local speed = mp.get_property_number("speed")
-        local old_speed = speed
-        if speedup and not no_speedup and speed <= effective_speed_cap then
-            if options.multiply_modifier then
-                speed = math.min(speed + (speed * options.speed_increase), effective_speed_cap)
-            else
-                speed = math.min(speed + options.speed_increase, effective_speed_cap)
-            end
+    end
+
+    local effective_speed_cap = (not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap
+    local speed = mp.get_property_number("speed")
+    local old_speed = speed
+    if speedup and not no_speedup and speed <= effective_speed_cap then
+        if options.multiply_modifier then
+            speed = math.min(speed + (speed * options.speed_increase), effective_speed_cap)
         else
-            if options.multiply_modifier then
-                speed = math.max(speed - (speed * options.speed_decrease), 1)
-            else
-                speed = math.max(speed - options.speed_decrease, 1)
-            end
+            speed = math.min(speed + options.speed_increase, effective_speed_cap)
         end
-        if speed ~= old_speed then
-            mp.set_property("speed", speed)
-            if options.uosc_flash_on_speed then
-                mp.command("script-binding uosc/flash-speed")
-            end
+    else
+        if options.multiply_modifier then
+            speed = math.max(speed - (speed * options.speed_decrease), 1)
+        else
+            speed = math.max(speed - options.speed_decrease, 1)
         end
-        if speed == 1 then
-            speed_timer:kill()
-            speed_timer = nil
-            repeated = false
-            jumps_reset_speed = true
+    end
+    if speed ~= old_speed then
+        mp.set_property("speed", speed)
+        if options.uosc_flash_on_speed then
+            mp.command("script-binding uosc/flash-speed")
         end
+    end
+    if speed == 1 then
+        speed_timer:kill()
+        speed_timer = nil
+        repeated = false
+        jumps_reset_speed = true
     end
 end
 
@@ -86,13 +86,26 @@ local function evafast(keypress)
         speedup = false
     end
 
+    if options.seek_distance == 0 then
+        if keypress["event"] == "up" or keypress["event"] == "press" then
+            speedup = false
+            no_speedup = true
+            repeated = false
+        end
+        if keypress["event"] == "down" then
+            keypress["event"] = "repeat"
+        end
+    end
+
     if keypress["event"] == "down" then
         repeated = false
         speedup = true
     elseif (keypress["event"] == "up" and not repeated) or keypress["event"] == "press" then
-        mp.commandv("seek", options.seek_distance)
-        if options.uosc_flash_on_seek then
-            mp.command("script-binding uosc/flash-timeline")
+        if options.seek_distance ~= 0 then
+            mp.commandv("seek", options.seek_distance)
+            if options.uosc_flash_on_seek then
+                mp.command("script-binding uosc/flash-timeline")
+            end
         end
         repeated = false
         if jumps_reset_speed then
