@@ -79,7 +79,7 @@ local function adjust_speed()
             mp.osd_message(("▶▶ x%.1f"):format(speed))
         end
     end
-    if speed == 1 then
+    if speed == 1 and effective_speed_cap ~= 1 then
         speed_timer:kill()
         speed_timer = nil
         repeated = false
@@ -100,6 +100,14 @@ local function evafast(keypress)
         end
         if keypress["event"] == "down" then
             keypress["event"] = "repeat"
+        end
+    end
+
+    if keypress["event"] == "up" or keypress["event"] == "press" then
+        if speed_timer ~= nil and mp.get_property_number("speed") == 1 then
+            speed_timer:kill()
+            speed_timer = nil
+            jumps_reset_speed = true
         end
     end
 
