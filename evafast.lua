@@ -33,11 +33,17 @@ local options = {
     -- Show current speed and seek actions on the osd
     osd_message = false,
 
+    -- Show current speed and seek actions on the osd when toggled
+    osd_message_toggled = false,
+
     -- Flash uosc timeline when seeking, ignore this if you're not using uosc
     uosc_flash_on_seek = true,
 
-    -- Flash uosc speed bar when adjusting speed, ignore this if you're not using uosc
-    uosc_flash_on_speed = true
+    -- Flash uosc speed bar when adjusting speed from holding right, ignore this if you're not using uosc
+    uosc_flash_on_speed = true,
+
+    -- Flash uosc speed bar when adjusting speed from evafast/toggle, ignore this if you're not using uosc
+    uosc_flash_on_speed_toggled = true
 }
 
 mp.options = require "mp.options"
@@ -48,6 +54,8 @@ local speed_timer = nil
 local speedup = true
 local no_speedup = false
 local jumps_reset_speed = true
+local toggle_display = false
+local toggle_state = false
 
 local function adjust_speed()
     local effective_speed_cap = (not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap
@@ -68,27 +76,29 @@ local function adjust_speed()
     end
     if speed ~= old_speed then
         mp.set_property("speed", speed)
-        if options.uosc_flash_on_speed then
+        if (options.uosc_flash_on_speed and not toggle_display) or (options.uosc_flash_on_speed_toggled and toggle_display) then
             mp.command("script-binding uosc/flash-speed")
         end
-        if options.osd_message then
+        if (options.osd_message and not toggle_display) or (options.osd_message_toggled and toggle_display) then
             mp.osd_message(("▶▶ x%.1f"):format(speed))
         end
     end
     if speed == 1 and effective_speed_cap ~= 1 then
-        if speed_timer ~= nil then
+        if speed_timer ~= nil and not toggle_state then
             speed_timer:kill()
             speed_timer = nil
         end
         repeated = false
         jumps_reset_speed = true
+        toggle_display = false
+        toggle_state = false
     elseif speed_timer == nil then
         speed_timer = mp.add_periodic_timer(options.speed_interval, adjust_speed)
     end
 end
 
 local function evafast(keypress)
-    if jumps_reset_speed and (keypress["event"] == "up" or keypress["event"] == "press") then
+    if jumps_reset_speed and not toggle_state and (keypress["event"] == "up" or keypress["event"] == "press") then
         speedup = false
     end
 
@@ -104,10 +114,13 @@ local function evafast(keypress)
     end
 
     if keypress["event"] == "up" or keypress["event"] == "press" then
-        if speed_timer ~= nil and mp.get_property_number("speed") == 1 and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= 1 then
+        toggle_display = toggle_state
+        if speed_timer ~= nil and not toggle_state and mp.get_property_number("speed") == 1 and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= 1 then
             speed_timer:kill()
             speed_timer = nil
             jumps_reset_speed = true
+            toggle_display = false
+            toggle_state = false
         end
     end
 
@@ -117,6 +130,7 @@ local function evafast(keypress)
         end
         repeated = false
         speedup = true
+        toggle_display = false
     elseif (keypress["event"] == "up" and not repeated) or keypress["event"] == "press" then
         if options.seek_distance ~= 0 then
             mp.commandv("seek", options.seek_distance)
@@ -125,7 +139,7 @@ local function evafast(keypress)
             end
         end
         repeated = false
-        if jumps_reset_speed then
+        if jumps_reset_speed and not toggle_state then
             no_speedup = true
         end
     elseif keypress["event"] == "repeat" then
@@ -142,6 +156,8 @@ local function evafast_speedup()
     no_speedup = false
     speedup = true
     jumps_reset_speed = false
+    toggle_display = true
+    toggle_state = true
     evafast({event = "repeat"})
 end
 
