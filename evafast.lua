@@ -127,8 +127,8 @@ local function evafast(keypress)
             jumps_reset_speed = true
             toggle_display = false
             toggle_state = false
-            freeze = false
         end
+        freeze = false
     end
 
     if keypress["event"] == "down" then
