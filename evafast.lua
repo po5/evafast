@@ -31,7 +31,7 @@ local options = {
     multiply_modifier = false,
 
     -- Show current speed and seek actions on the osd
-    osd_message = false,
+    osd_message = true,
 
     -- Show current speed and seek actions on the osd when toggled
     osd_message_toggled = false,
