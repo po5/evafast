@@ -30,25 +30,20 @@ local options = {
     -- Use much lower values than default e.g. speed_increase=0.05, speed_decrease=0.025
     multiply_modifier = false,
 
-    -- Show current speed and seek actions on the osd
-    osd_message = true,
+    -- Show current speed on the osd (or flash speed if using uosc)
+    show_speed = true,
 
-    -- Show current speed and seek actions on the osd when toggled
-    osd_message_toggled = false,
+    -- Show current speed on the osd when toggled (or flash speed if using uosc)
+    show_speed_toggled = true,
 
-    -- Flash uosc timeline when seeking, ignore this if you're not using uosc
-    uosc_flash_on_seek = true,
-
-    -- Flash uosc speed bar when adjusting speed from holding right, ignore this if you're not using uosc
-    uosc_flash_on_speed = true,
-
-    -- Flash uosc speed bar when adjusting speed from evafast/toggle, ignore this if you're not using uosc
-    uosc_flash_on_speed_toggled = true
+    -- Show seek actions on the osd (or flash timeline if using uosc)
+    show_seek = true
 }
 
 mp.options = require "mp.options"
 mp.options.read_options(options, "evafast")
 
+local uosc_available = false
 local repeated = false
 local speed_timer = nil
 local speedup = true
@@ -79,11 +74,12 @@ local function adjust_speed()
     end
     if speed ~= old_speed then
         mp.set_property("speed", speed)
-        if (options.uosc_flash_on_speed and not toggle_display) or (options.uosc_flash_on_speed_toggled and toggle_display) then
-            mp.command("script-binding uosc/flash-speed")
-        end
-        if (options.osd_message and not toggle_display) or (options.osd_message_toggled and toggle_display) then
-            mp.osd_message(("▶▶ x%.1f"):format(speed))
+        if (options.show_speed and not toggle_display) or (options.show_speed_toggled and toggle_display) then
+            if uosc_available then
+                mp.command("script-binding uosc/flash-speed")
+            else
+                mp.osd_message(("▶▶ x%.1f"):format(speed))
+            end
         end
     end
     if speed == 1 and effective_speed_cap ~= 1 then
@@ -132,17 +128,17 @@ local function evafast(keypress)
     end
 
     if keypress["event"] == "down" then
-        if options.osd_message and not repeated then
-            mp.osd_message("▶▶")
-        end
         repeated = false
         speedup = true
         freeze = true
         toggle_display = false
+        if options.show_seek and not repeated and not uosc_available then
+            mp.osd_message("▶▶")
+        end
     elseif (keypress["event"] == "up" and not repeated) or keypress["event"] == "press" then
         if options.seek_distance ~= 0 then
             mp.commandv("seek", options.seek_distance)
-            if options.uosc_flash_on_seek then
+            if options.show_seek and uosc_available then
                 mp.command("script-binding uosc/flash-timeline")
             end
         end
@@ -184,6 +180,12 @@ local function evafast_toggle()
         evafast_speedup()
     end
 end
+
+mp.register_script_message("uosc-version", function(version)
+    uosc_available = true
+end)
+
+mp.command_native_async({"script-message-to", "uosc", "get-version", mp.get_script_name()}, function(success, result, error) end)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "speedup", evafast_speedup)
