@@ -104,7 +104,7 @@ local function evafast(keypress)
     end
 
     if keypress["event"] == "up" or keypress["event"] == "press" then
-        if speed_timer ~= nil and mp.get_property_number("speed") == 1 then
+        if speed_timer ~= nil and mp.get_property_number("speed") == 1 and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= 1 then
             speed_timer:kill()
             speed_timer = nil
             jumps_reset_speed = true
