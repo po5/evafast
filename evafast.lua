@@ -37,7 +37,10 @@ local options = {
     show_speed_toggled = true,
 
     -- Show seek actions on the osd (or flash timeline if using uosc)
-    show_seek = true
+    show_seek = true,
+
+    -- Look ahead for smoother transition when subs_speed_cap is set
+    lookahead = false
 }
 
 mp.options = require "mp.options"
@@ -53,11 +56,64 @@ local toggle_display = false
 local toggle_state = false
 local freeze = false
 
+local forced_speed_cap = nil
+local use_forced_speed_cap = false
+
 local function adjust_speed()
-    local effective_speed_cap = (not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap
+    local no_sub_speed = not options.subs_speed_cap or mp.get_property("sub-start") == nil
+    local effective_speed_cap = no_sub_speed and options.speed_cap or options.subs_speed_cap
     local speed = mp.get_property_number("speed")
     local old_speed = speed
+
+    if options.lookahead and options.subs_speed_cap and no_sub_speed and not use_forced_speed_cap then
+        local sub_delay = mp.get_property_native("sub-delay")
+        local sub_visible = mp.get_property_bool("sub-visibility")
+        if sub_visible then
+            mp.set_property_bool("sub-visibility", false)
+        end
+        mp.command("no-osd sub-step 1")
+        local sub_next_delay = mp.get_property_native("sub-delay")
+        local sub_next = sub_delay - sub_next_delay
+        mp.set_property("sub-delay", sub_delay)
+        if sub_visible then
+            mp.set_property_bool("sub-visibility", sub_visible)
+        end
+        -- calculate how long it takes to get from current speed to target speed, and use that as threshold for sub_next
+        local time_for_correction = 0
+        local test_speed = speed
+        if not freeze then
+            while test_speed ~= options.subs_speed_cap do
+                time_for_correction = time_for_correction + options.speed_interval
+                if test_speed <= options.subs_speed_cap then
+                    if options.multiply_modifier then
+                        test_speed = math.min(test_speed + (test_speed * options.speed_increase), options.subs_speed_cap)
+                    else
+                        test_speed = math.min(test_speed + options.speed_increase, options.subs_speed_cap)
+                    end
+                else
+                    if options.multiply_modifier then
+                        test_speed = math.max(test_speed - (test_speed * options.speed_decrease), 1)
+                    else
+                        test_speed = math.max(test_speed - options.speed_decrease, 1)
+                    end
+                end
+                if test_speed == 1 then break end
+            end
+        end
+        if sub_next ~= 0 and sub_next <= (time_for_correction * speed) then
+            effective_speed_cap = options.subs_speed_cap
+            use_forced_speed_cap = true
+            forced_speed_cap = effective_speed_cap
+        end
+    end
+
     if not freeze then
+        if forced_speed_cap ~= nil then
+            if speed ~= forced_speed_cap or mp.get_property_bool("pause") then
+                use_forced_speed_cap = true
+            end
+            effective_speed_cap = forced_speed_cap
+        end
         if speedup and not no_speedup and speed <= effective_speed_cap then
             if options.multiply_modifier then
                 speed = math.min(speed + (speed * options.speed_increase), effective_speed_cap)
@@ -71,7 +127,16 @@ local function adjust_speed()
                 speed = math.max(speed - options.speed_decrease, 1)
             end
         end
+        if forced_speed_cap ~= nil and not use_forced_speed_cap then
+            forced_speed_cap = nil
+        end
+        if speed == options.subs_speed_cap then
+            if use_forced_speed_cap then
+                use_forced_speed_cap = false
+            end
+        end
     end
+
     if speed ~= old_speed then
         mp.set_property("speed", speed)
         if (options.show_speed and not toggle_display) or (options.show_speed_toggled and toggle_display) then
@@ -82,6 +147,7 @@ local function adjust_speed()
             end
         end
     end
+
     if speed == 1 and effective_speed_cap ~= 1 then
         if speed_timer ~= nil and not toggle_state then
             speed_timer:kill()
