@@ -59,10 +59,36 @@ local freeze = false
 local forced_speed_cap = nil
 local use_forced_speed_cap = false
 
+local speedup_target = nil
+
+local function speed_transition(test_speed, target)
+    local time_for_correction = 0
+    if not freeze then
+        while test_speed ~= target do
+            time_for_correction = time_for_correction + options.speed_interval
+            if test_speed <= target then
+                if options.multiply_modifier then
+                    test_speed = math.min(test_speed + (test_speed * options.speed_increase), target)
+                else
+                    test_speed = math.min(test_speed + options.speed_increase, target)
+                end
+            else
+                if options.multiply_modifier then
+                    test_speed = math.max(test_speed - (test_speed * options.speed_decrease), 1)
+                else
+                    test_speed = math.max(test_speed - options.speed_decrease, 1)
+                end
+            end
+            if test_speed == 1 then break end
+        end
+    end
+    return time_for_correction
+end
+
 local function adjust_speed()
     local no_sub_speed = not options.subs_speed_cap or mp.get_property("sub-start") == nil
     local effective_speed_cap = no_sub_speed and options.speed_cap or options.subs_speed_cap
-    local speed = mp.get_property_number("speed")
+    local speed = mp.get_property_number("speed", 1)
     local old_speed = speed
 
     if options.lookahead and options.subs_speed_cap and no_sub_speed and not use_forced_speed_cap then
@@ -79,31 +105,31 @@ local function adjust_speed()
             mp.set_property_bool("sub-visibility", sub_visible)
         end
         -- calculate how long it takes to get from current speed to target speed, and use that as threshold for sub_next
-        local time_for_correction = 0
-        local test_speed = speed
-        if not freeze then
-            while test_speed ~= options.subs_speed_cap do
-                time_for_correction = time_for_correction + options.speed_interval
-                if test_speed <= options.subs_speed_cap then
-                    if options.multiply_modifier then
-                        test_speed = math.min(test_speed + (test_speed * options.speed_increase), options.subs_speed_cap)
-                    else
-                        test_speed = math.min(test_speed + options.speed_increase, options.subs_speed_cap)
-                    end
-                else
-                    if options.multiply_modifier then
-                        test_speed = math.max(test_speed - (test_speed * options.speed_decrease), 1)
-                    else
-                        test_speed = math.max(test_speed - options.speed_decrease, 1)
-                    end
-                end
-                if test_speed == 1 then break end
-            end
-        end
+        local time_for_correction = speed_transition(speed, options.subs_speed_cap)
         if sub_next ~= 0 and sub_next <= (time_for_correction * speed) then
             effective_speed_cap = options.subs_speed_cap
             use_forced_speed_cap = true
             forced_speed_cap = effective_speed_cap
+        end
+    end
+
+    if speedup_target ~= nil then
+        local current_time = mp.get_property_number("time-pos", 0)
+        if current_time >= speedup_target then
+            jumps_reset_speed = true
+            no_speedup = true
+            repeated = false
+            freeze = false
+        else
+            local time_for_correction = speed_transition(speed, math.max(math.min(options.speed_cap, options.subs_speed_cap and options.subs_speed_cap or options.speed_cap), 1.1)) -- not effective_speed_cap because it may lead to huge fluctuations in transition speed
+            if (time_for_correction * speed + current_time) > speedup_target then
+                effective_speed_cap = 1.1 -- >1 so we don't get stuck trying to catch the target
+                use_forced_speed_cap = true
+                forced_speed_cap = effective_speed_cap
+            else
+                forced_speed_cap = nil
+                use_forced_speed_cap = false
+            end
         end
     end
 
@@ -157,6 +183,7 @@ local function adjust_speed()
         jumps_reset_speed = true
         toggle_display = false
         toggle_state = false
+        speedup_target = nil
     elseif speed_timer == nil then
         speed_timer = mp.add_periodic_timer(options.speed_interval, adjust_speed)
     end
@@ -165,6 +192,7 @@ end
 local function evafast(keypress)
     if jumps_reset_speed and not toggle_state and (keypress["event"] == "up" or keypress["event"] == "press") then
         speedup = false
+        speedup_target = nil
     end
 
     if options.seek_distance == 0 then
@@ -172,6 +200,7 @@ local function evafast(keypress)
             speedup = false
             no_speedup = true
             repeated = false
+            speedup_target = nil
         end
         if keypress["event"] == "down" then
             keypress["event"] = "repeat"
@@ -182,6 +211,7 @@ local function evafast(keypress)
         toggle_display = toggle_state
         if toggle_state and jumps_reset_speed then
             speedup = false
+            speedup_target = nil
         end
         if speed_timer ~= nil and not toggle_state and mp.get_property_number("speed") == 1 and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= 1 then
             speed_timer:kill()
@@ -189,6 +219,7 @@ local function evafast(keypress)
             jumps_reset_speed = true
             toggle_display = false
             toggle_state = false
+            speedup_target = nil
         end
         freeze = false
     end
@@ -201,7 +232,7 @@ local function evafast(keypress)
         if options.show_seek and not repeated and not uosc_available then
             mp.osd_message("▶▶")
         end
-    elseif (keypress["event"] == "up" and not repeated) or keypress["event"] == "press" then
+    elseif (keypress["event"] == "up" and (not repeated or speedup_target)) or keypress["event"] == "press" then
         if options.seek_distance ~= 0 then
             mp.commandv("seek", options.seek_distance)
             if options.show_seek and uosc_available then
@@ -237,6 +268,7 @@ local function evafast_slowdown()
     no_speedup = true
     repeated = false
     freeze = false
+    speedup_target = nil
 end
 
 local function evafast_toggle()
@@ -251,9 +283,28 @@ mp.register_script_message("uosc-version", function(version)
     uosc_available = true
 end)
 
-mp.command_native_async({"script-message-to", "uosc", "get-version", mp.get_script_name()}, function(success, result, error) end)
+mp.register_script_message("speedup-target", function(time)
+    time = tonumber(time) or 0
+    if mp.get_property_number("time-pos", 0) >= time then
+        if speedup_target ~= nil then
+            use_forced_speed_cap = false
+            forced_speed_cap = nil
+            speedup_target = nil
+            evafast_slowdown()
+        end
+        return
+    end
+    speedup_target = time
+    evafast_speedup()
+end)
+
+mp.register_script_message("get-version", function(script)
+    mp.commandv("script-message-to", script, "evafast-version", "1.0")
+end)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "speedup", evafast_speedup)
 mp.add_key_binding(nil, "slowdown", evafast_slowdown)
 mp.add_key_binding(nil, "toggle", evafast_toggle)
+
+mp.commandv("script-message-to", "uosc", "get-version", mp.get_script_name())
