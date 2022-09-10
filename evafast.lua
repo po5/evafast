@@ -36,6 +36,9 @@ local options = {
     -- Show current speed on the osd when toggled (or flash speed if using uosc)
     show_speed_toggled = true,
 
+    -- Show current speed on the osd when speeding up towards a target time (or flash speed if using uosc)
+    show_speed_target = false,
+
     -- Show seek actions on the osd (or flash timeline if using uosc)
     show_seek = true,
 
@@ -165,7 +168,7 @@ local function adjust_speed()
 
     if speed ~= old_speed then
         mp.set_property("speed", speed)
-        if (options.show_speed and not toggle_display) or (options.show_speed_toggled and toggle_display) then
+        if (options.show_speed and not toggle_display) or (options.show_speed_toggled and toggle_display and speedup_target == nil) or (options.show_speed_target and speedup_target ~= nil) then
             if uosc_available then
                 mp.command("script-binding uosc/flash-speed")
             else
