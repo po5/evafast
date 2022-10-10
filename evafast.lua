@@ -43,7 +43,10 @@ local options = {
     show_seek = true,
 
     -- Look ahead for smoother transition when subs_speed_cap is set
-    lookahead = false
+    lookahead = false,
+
+    -- Restore original speed
+    restore_original_speed = true
 }
 
 mp.options = require "mp.options"
@@ -64,12 +67,15 @@ local use_forced_speed_cap = false
 
 local speedup_target = nil
 
+local original_speed = 1
+
 local function speed_transition(test_speed, target)
     local time_for_correction = 0
     if not freeze then
+        local stat_func = test_speed <= original_speed and math.min or math.max
         while test_speed ~= target do
             time_for_correction = time_for_correction + options.speed_interval
-            if test_speed <= target then
+            if test_speed < target then
                 if options.multiply_modifier then
                     test_speed = math.min(test_speed + (test_speed * options.speed_increase), target)
                 else
@@ -77,12 +83,12 @@ local function speed_transition(test_speed, target)
                 end
             else
                 if options.multiply_modifier then
-                    test_speed = math.max(test_speed - (test_speed * options.speed_decrease), 1)
+                    test_speed = stat_func(test_speed - (test_speed * options.speed_decrease), original_speed)
                 else
-                    test_speed = math.max(test_speed - options.speed_decrease, 1)
+                    test_speed = stat_func(test_speed - options.speed_decrease, original_speed)
                 end
+                if test_speed == original_speed then break end
             end
-            if test_speed == 1 then break end
         end
     end
     return time_for_correction
@@ -151,9 +157,18 @@ local function adjust_speed()
             end
         else
             if options.multiply_modifier then
-                speed = math.max(speed - (speed * options.speed_decrease), 1)
+                speed = speed - (speed * options.speed_decrease)
             else
-                speed = math.max(speed - options.speed_decrease, 1)
+                speed = speed - options.speed_decrease
+            end
+            if speed > effective_speed_cap then
+                -- noop
+            elseif speed <= effective_speed_cap and original_speed >= effective_speed_cap then
+                print("ent1", speed)
+                speed = effective_speed_cap
+            else
+                print("ent2", speed)
+                speed = math.max(speed, original_speed)
             end
         end
         if forced_speed_cap ~= nil and not use_forced_speed_cap then
@@ -177,7 +192,7 @@ local function adjust_speed()
         end
     end
 
-    if speed == 1 and effective_speed_cap ~= 1 then
+    if speed == original_speed and effective_speed_cap ~= original_speed then
         if speed_timer ~= nil and not toggle_state then
             speed_timer:kill()
             speed_timer = nil
@@ -200,8 +215,10 @@ local function evafast(keypress)
 
     if options.seek_distance == 0 then
         if keypress["event"] == "up" or keypress["event"] == "press" then
-            speedup = false
-            no_speedup = true
+            if original_speed <= mp.get_property_number("speed", 1) then
+                speedup = false
+                no_speedup = true
+            end
             repeated = false
             speedup_target = nil
         end
@@ -216,7 +233,7 @@ local function evafast(keypress)
             speedup = false
             speedup_target = nil
         end
-        if speed_timer ~= nil and not toggle_state and mp.get_property_number("speed") == 1 and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= 1 then
+        if speed_timer ~= nil and not toggle_state and mp.get_property_number("speed", 1) == original_speed and ((not options.subs_speed_cap or mp.get_property("sub-start") == nil) and options.speed_cap or options.subs_speed_cap) ~= original_speed then
             speed_timer:kill()
             speed_timer = nil
             jumps_reset_speed = true
@@ -232,6 +249,8 @@ local function evafast(keypress)
         speedup = true
         freeze = true
         toggle_display = false
+        original_speed = mp.get_property_number("speed", 1)
+        print("original_speed", original_speed)
         if options.show_seek and not repeated and not uosc_available then
             mp.osd_message("▶▶")
         end
@@ -243,8 +262,10 @@ local function evafast(keypress)
             end
         end
         repeated = false
-        if jumps_reset_speed and not toggle_state then
-            no_speedup = true
+        if original_speed <= mp.get_property_number("speed", 1) then
+            if jumps_reset_speed and not toggle_state then
+                no_speedup = true
+            end
         end
     elseif keypress["event"] == "repeat" then
         freeze = false
@@ -268,7 +289,9 @@ end
 
 local function evafast_slowdown()
     jumps_reset_speed = true
-    no_speedup = true
+    if original_speed <= mp.get_property_number("speed", 1) then
+        no_speedup = true
+    end
     repeated = false
     freeze = false
     speedup_target = nil
@@ -277,7 +300,9 @@ end
 local function evafast_toggle()
     if (repeated or not jumps_reset_speed) and speedup then
         evafast_slowdown()
+        print("toggle off")
     else
+        evafast({event = "down"})
         evafast_speedup()
     end
 end
