@@ -26,6 +26,11 @@ local options = {
     -- Playback speed cap when subtitles are displayed, 'no' for same as speed_cap
     subs_speed_cap = 1.6,
 
+    -- Playback speed cap when there is silence
+    noise_speed_cap = 1.4,
+    quietness = -30,
+    silence_duration = 0.1,
+
     -- Multiply current speed by modifier before adjustment (exponential speedup)
     -- Use much lower values than default e.g. speed_increase=0.05, speed_decrease=0.025
     multiply_modifier = false,
@@ -282,11 +287,7 @@ local function evafast_toggle()
     end
 end
 
-mp.register_script_message("uosc-version", function(version)
-    uosc_available = true
-end)
-
-mp.register_script_message("speedup-target", function(time)
+local function evafast_speedup_target(time)
     time = tonumber(time) or 0
     if mp.get_property_number("time-pos", 0) >= time then
         if speedup_target ~= nil then
@@ -299,11 +300,35 @@ mp.register_script_message("speedup-target", function(time)
     end
     speedup_target = time
     evafast_speedup()
+end
+
+mp.register_script_message("uosc-version", function(version)
+    uosc_available = true
 end)
+
+mp.register_script_message("speedup-target", evafast_speedup_target)
 
 mp.register_script_message("get-version", function(script)
     mp.commandv("script-message-to", script, "evafast-version", "1.0")
 end)
+
+if options.noise_speed_cap then
+    mp.command("no-osd af add @noisedetect:lavfi=[silencedetect=noise=" .. options.quietness .. "dB:d=" .. options.silence_duration .. "]")
+end
+
+function foundSilence(name, value)
+    if value == "{}" or value == nil then return end
+
+    local duration = tonumber(string.match(value, 'lavfi%.silence_duration":%"(%d+%.?%d+)"'))
+    if not duration or duration < 1 then return end
+
+    timecode = tonumber(string.match(value, 'lavfi%.silence_end":%"(%d+%.?%d+)"'))
+
+    evafast_speedup_target(timecode)
+    print("timecode", timecode, value)
+end
+
+mp.observe_property("af-metadata/noisedetect", "string", foundSilence)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "speedup", evafast_speedup)
