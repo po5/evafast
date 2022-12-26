@@ -57,6 +57,7 @@ local toggled = false
 local speedup = false
 local original_speed = 1
 local next_sub_at = -1
+local rewinding = false
 
 local function speed_transition(current_speed, target_speed)
     local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
@@ -185,6 +186,10 @@ local function adjust_speed()
             speed_timer:kill()
             toggled_display = true
             speedup_target = nil
+            if rewinding then
+                mp.set_property("play-dir", "+")
+                rewinding = false
+            end
         end
         return
     end
@@ -212,7 +217,11 @@ end
 speed_timer = mp.add_periodic_timer(100, adjust_speed)
 speed_timer:kill()
 
-local function evafast(keypress)
+local function evafast(keypress, rewind)
+    if rewinding and not rewind then
+        rewinding = false
+        mp.set_property("play-dir", "+")
+    end
     if keypress["event"] == "down" then
         if not speed_timer:is_enabled() then
             if not toggled then
@@ -236,7 +245,13 @@ local function evafast(keypress)
         else
             evafast_speedup()
         end
-        mp.commandv("seek", options.seek_distance)
+        if rewind then
+            mp.commandv("seek", -options.seek_distance)
+            mp.set_property("play-dir", "+")
+            rewinding = false
+        else
+            mp.commandv("seek", options.seek_distance)
+        end
         flash_speed()
     elseif keypress["event"] == "repeat" or keypress["event"] == "up" then
         speedup = toggled or keypress["event"] == "repeat"
@@ -244,10 +259,18 @@ local function evafast(keypress)
             toggled_display = false
         end
         if speed_timer:is_enabled() then return end
+        if rewind then
+            mp.set_property("play-dir", "-")
+            rewinding = true
+        end
         speed_timer.timeout = 0
         speed_timer:resume()
         speed_timer.timeout = options.speed_interval
     end
+end
+
+local function evafast_rewind(keypress)
+    evafast(keypress, true)
 end
 
 mp.observe_property("sid", "native", function(prop, val)
@@ -293,6 +316,7 @@ end)
 
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
+mp.add_key_binding(nil, "evafast-rewind", evafast_rewind, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "flash-speed", function() flash_speed(mp.get_property_number("speed", 1), nil, true) end)
 mp.add_key_binding(nil, "speedup", evafast_speedup)
 mp.add_key_binding(nil, "slowdown", evafast_slowdown)
