@@ -58,6 +58,7 @@ local speedup = false
 local original_speed = 1
 local next_sub_at = -1
 local rewinding = false
+local forced_slowdown = false
 
 local function speed_transition(current_speed, target_speed)
     local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
@@ -119,18 +120,21 @@ local function flash_speed(current_speed, display, forced)
     end
 end
 
-local function evafast_speedup()
+local function evafast_speedup(skip_toggle)
     if not toggled and not speed_timer:is_enabled() then
         original_speed = mp.get_property_number("speed", 1)
     end
+    if not skip_toggle or not toggled then
+        speedup = true
+    end
     toggled = true
-    speedup = true
     speed_timer.timeout = 0
     speed_timer:resume()
     speed_timer.timeout = options.speed_interval
 end
 
 local function evafast_slowdown()
+    forced_slowdown = false
     toggled_display = false
     toggled = false
     speedup = false
@@ -174,7 +178,8 @@ local function adjust_speed()
             else
                 local time_for_correction = speed_transition(current_speed, original_speed)
                 if (time_for_correction * current_speed + current_time) > speedup_target then
-                    evafast_slowdown()
+                    forced_slowdown = true
+                    speedup = false
                     target_speed = original_speed
                 end
             end
@@ -182,9 +187,12 @@ local function adjust_speed()
     end
 
     if math.floor(target_speed * 1000) == math.floor(current_speed * 1000) then
-        if not toggled and (not speedup or options.subs_speed_cap == options.speed_cap or not has_subtitle) then
+        if forced_slowdown or (not toggled and (not speedup or options.subs_speed_cap == options.speed_cap or not has_subtitle)) then
             speed_timer:kill()
             toggled_display = true
+            if speedup_target ~= nil then
+                evafast_slowdown()
+            end
             speedup_target = nil
             if rewinding then
                 mp.set_property("play-dir", "+")
@@ -208,7 +216,7 @@ local function adjust_speed()
     else
         new_speed = math.min(current_speed + speed_correction, target_speed)
     end
-    
+
     mp.set_property("speed", new_speed)
 
     flash_speed(new_speed)
@@ -294,7 +302,7 @@ mp.register_script_message("speedup-target", function(time)
         return
     end
     speedup_target = time
-    evafast_speedup()
+    evafast_speedup(true)
 end)
 
 mp.register_script_message("get-version", function(script)
@@ -313,7 +321,6 @@ mp.register_script_message("set-option", function(option, value)
         options[option] = value
     end
 end)
-
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "evafast-rewind", evafast_rewind, {repeatable = true, complex = true})
