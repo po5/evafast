@@ -96,31 +96,24 @@ local function next_sub(current_time)
 end
 
 local function flash_speed(current_speed, display, forced)
-    if current_speed then
-        if ((toggled or not speedup) and ((options.show_speed_toggled and not speedup_target) or (options.show_speed_target and speedup_target)))
-            or (not toggled and options.show_speed and toggled_display)
-            or forced then
-            if uosc_available then
-                if not display or display == "uosc" then
-                    mp.command("script-binding uosc/flash-speed")
-                end
-            elseif current_speed then
-                if not display or display == "osd" then
-                    mp.osd_message(string.format("▶▶ x%.1f", current_speed))
-                end
-            end
+    local uosc_show = uosc_available and (display == nil or display == "uosc")
+    local osd_show = not uosc_available and (display == nil or display == "osd")
+
+    local show_special = (options.show_speed_toggled and not speedup_target) or (options.show_speed_target and speedup_target)
+    local show_toggled = (toggled or not speedup) and show_special
+    local show_regular = not toggled and options.show_speed and toggled_display
+
+    if current_speed and (show_toggled or show_regular or forced) then
+        if uosc_show then
+            mp.command("script-binding uosc/flash-speed")
+        elseif osd_show then
+            mp.osd_message(string.format("▶▶ x%.1f", current_speed))
         end
-    else
-        if options.show_seek then
-            if uosc_available then
-                if not display or display == "uosc" then
-                    mp.command("script-binding uosc/flash-timeline")
-                end
-            else
-                if not display or display == "osd" then
-                    mp.osd_message("▶▶")
-                end
-            end
+    elseif options.show_seek and not current_speed then
+        if uosc_show then
+            mp.command("script-binding uosc/flash-timeline")
+        elseif osd_show then
+            mp.osd_message("▶▶")
         end
     end
 end
