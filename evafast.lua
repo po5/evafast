@@ -58,29 +58,14 @@ local speedup = false
 local original_speed = 1
 local next_sub_at = -1
 
-local function speed_transition(test_speed, target_speed)
-    local speed_correction = 0
-    local time_for_correction = 0
+local function speed_transition(current_speed, target_speed)
+    local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
 
-    while test_speed ~= target_speed do
-        time_for_correction = time_for_correction + options.speed_interval
-
-        if options.multiply_modifier then
-            speed_correction = test_speed * options.speed_increase
-        else
-            speed_correction = options.speed_increase
-        end
-
-        if test_speed > target_speed then
-            test_speed = math.max(test_speed - speed_correction, 1)
-        else
-            test_speed = math.min(test_speed + speed_correction, target_speed)
-        end
-
-        if test_speed == 1 then break end
+    if speed_correction == 0 then
+        return 0
     end
 
-    return time_for_correction
+    return math.ceil(math.abs(target_speed - current_speed) / speed_correction) * options.speed_interval
 end
 
 local function next_sub(current_time)
