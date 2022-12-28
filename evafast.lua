@@ -165,7 +165,7 @@ local function adjust_speed()
                 end
                 if next_sub_at >= current_time then
                     local time_for_correction = speed_transition(current_speed, options.subs_speed_cap)
-                    if (time_for_correction * current_speed + current_time) > next_sub_at then
+                    if (time_for_correction + current_time) > next_sub_at then
                         target_speed = options.subs_speed_cap
                     end
                 end
@@ -177,7 +177,7 @@ local function adjust_speed()
                 evafast_slowdown()
             else
                 local time_for_correction = speed_transition(current_speed, original_speed)
-                if (time_for_correction * current_speed + current_time) > speedup_target then
+                if (time_for_correction + current_time) > speedup_target then
                     forced_slowdown = true
                     speedup = false
                     target_speed = original_speed
