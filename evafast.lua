@@ -59,6 +59,7 @@ local original_speed = 1
 local next_sub_at = -1
 local rewinding = false
 local forced_slowdown = false
+local file_duration = 0
 
 local function speed_transition(current_speed, target_speed)
     local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
@@ -175,11 +176,13 @@ local function adjust_speed()
         end
 
         if speedup_target ~= nil then
-            if current_time >= speedup_target then
+            local effective_speedup_target = speedup_target >= 0 and speedup_target or (file_duration + speedup_target)
+
+            if current_time >= effective_speedup_target then
                 evafast_slowdown()
             else
                 local time_for_correction = speed_transition(current_speed, original_speed)
-                if (time_for_correction + current_time) > speedup_target then
+                if (time_for_correction + current_time) > effective_speedup_target then
                     forced_slowdown = true
                     speedup = false
                     target_speed = original_speed
@@ -283,6 +286,10 @@ local function evafast_rewind(keypress)
     evafast(keypress, true)
 end
 
+mp.observe_property("duration", "native", function(prop, val)
+    file_duration = val or 0
+end)
+
 mp.observe_property("sid", "native", function(prop, val)
     has_subtitle = (val or 0) ~= 0
     next_sub_at = -1
@@ -297,8 +304,15 @@ mp.register_script_message("uosc-version", function(version)
 end)
 
 mp.register_script_message("speedup-target", function(time)
+    local current_time = mp.get_property_number("time-pos", 0)
+    sign = string.sub(time, 1, 1)
     time = tonumber(time) or 0
-    if mp.get_property_number("time-pos", 0) >= time then
+
+    if sign == "+" then
+        time = current_time + time
+    end
+
+    if current_time >= time and time >= 0 then
         speedup_target = nil
         evafast_slowdown()
         return
