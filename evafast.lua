@@ -156,14 +156,16 @@ local function adjust_speed()
     if speedup then
         target_speed = options.speed_cap
 
-        if has_subtitle and options.subs_speed_cap ~= options.speed_cap then
+        if has_subtitle then
             if mp.get_property("sub-start") ~= nil then
                 target_speed = options.subs_speed_cap
-            elseif options.subs_lookahead then
+            end
+
+            if options.subs_lookahead then
                 if next_sub_at < current_time then
                     next_sub_at = next_sub(current_time)
                 end
-                if next_sub_at >= current_time then
+                if options.subs_speed_cap ~= target_speed and next_sub_at > current_time then
                     local time_for_correction = speed_transition(current_speed, options.subs_speed_cap)
                     if (time_for_correction + current_time) > next_sub_at then
                         target_speed = options.subs_speed_cap
