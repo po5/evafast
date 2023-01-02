@@ -60,6 +60,7 @@ local next_sub_at = -1
 local rewinding = false
 local forced_slowdown = false
 local file_duration = 0
+local last_key_state = "up"
 
 local function speed_transition(current_speed, target_speed)
     local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
@@ -89,7 +90,7 @@ local function next_sub(current_time)
     end
 
     if sub_delay - sub_next_delay == 0 then
-        return -1
+        return -2
     end
 
     local sub_next = current_time + sub_delay - sub_next_delay
@@ -98,7 +99,7 @@ local function next_sub(current_time)
     return normalized
 end
 
-local function flash_speed(current_speed, display, forced)
+local function flash_state(current_speed, display, forced)
     local uosc_show = uosc_available and (display == nil or display == "uosc")
     local osd_show = not uosc_available and (display == nil or display == "osd")
 
@@ -121,31 +122,43 @@ local function flash_speed(current_speed, display, forced)
     end
 end
 
-local function evafast_speedup(skip_toggle)
-    if not toggled and not speed_timer:is_enabled() then
-        original_speed = mp.get_property_number("speed", 1)
-    end
-    if not skip_toggle or not toggled then
-        speedup = true
-    end
-    toggled = true
+local function ensure_timer(reset)
+    if not reset and speed_timer:is_enabled() then return end
+
     speed_timer.timeout = 0
     speed_timer:resume()
     speed_timer.timeout = options.speed_interval
 end
 
-local function evafast_slowdown()
+local function evafast_speedup(toggle)
+    if not toggled and not speed_timer:is_enabled() then
+        original_speed = mp.get_property_number("speed", 1)
+    end
+
+    speedup = true
+
+    if toggle then
+        toggled = true
+    end
+
+    ensure_timer()
+end
+
+local function evafast_slowdown(display)
     forced_slowdown = false
-    toggled_display = false
+    if not display then
+        toggled_display = false
+    end
     toggled = false
     speedup = false
 end
 
 local function evafast_toggle()
-    if speedup and speed_timer:is_enabled() then
+    if speedup then
         evafast_slowdown()
+        ensure_timer()
     else
-        evafast_speedup()
+        evafast_speedup(true)
     end
 end
 
@@ -157,18 +170,18 @@ local function adjust_speed()
     if speedup then
         target_speed = options.speed_cap
 
-        if has_subtitle then
+        if has_subtitle and target_speed ~= options.subs_speed_cap then
             if mp.get_property("sub-start") ~= nil then
                 target_speed = options.subs_speed_cap
             end
 
             if options.subs_lookahead then
-                if next_sub_at < current_time then
+                if next_sub_at < current_time and next_sub_at ~= -2 then
                     next_sub_at = next_sub(current_time)
                 end
-                if options.subs_speed_cap ~= target_speed and next_sub_at > current_time then
-                    local time_for_correction = speed_transition(current_speed, options.subs_speed_cap)
-                    if (time_for_correction + current_time) > next_sub_at then
+                if target_speed ~= options.subs_speed_cap and next_sub_at > current_time then
+                    local time_for_correction = speed_transition(options.speed_cap, options.subs_speed_cap) * target_speed
+                    if current_time + time_for_correction >= next_sub_at then
                         target_speed = options.subs_speed_cap
                     end
                 end
@@ -181,8 +194,8 @@ local function adjust_speed()
             if current_time >= effective_speedup_target then
                 evafast_slowdown()
             else
-                local time_for_correction = speed_transition(current_speed, original_speed)
-                if (time_for_correction + current_time) > effective_speedup_target then
+                local time_for_correction = speed_transition(current_speed, original_speed) * current_speed
+                if current_time + time_for_correction > effective_speedup_target or forced_slowdown then
                     forced_slowdown = true
                     speedup = false
                     target_speed = original_speed
@@ -199,10 +212,6 @@ local function adjust_speed()
                 evafast_slowdown()
             end
             speedup_target = nil
-            if rewinding then
-                mp.set_property("play-dir", "+")
-                rewinding = false
-            end
         end
         return
     end
@@ -224,25 +233,20 @@ local function adjust_speed()
 
     mp.set_property("speed", new_speed)
 
-    flash_speed(new_speed)
+    flash_state(new_speed)
 end
 
 speed_timer = mp.add_periodic_timer(100, adjust_speed)
 speed_timer:kill()
 
 local function evafast(keypress, rewind)
-    if rewinding and not rewind then
-        rewinding = false
-        mp.set_property("play-dir", "+")
-    end
     if keypress["event"] == "down" then
         if not speed_timer:is_enabled() then
             if not toggled then
                 original_speed = mp.get_property_number("speed", 1)
             end
-            flash_speed(nil, "osd")
-        else
-            flash_speed(1, "uosc", true)
+            flash_state(nil, "osd")
+            flash_state(1, "uosc", true)
         end
         toggled_display = true
         speed_timer:stop()
@@ -251,35 +255,23 @@ local function evafast(keypress, rewind)
         end
     end
 
-    if options.seek_distance ~= 0 and (keypress["event"] == "press" or (keypress["event"] == "up" and not speed_timer:is_enabled())) then
+    if keypress["event"] == "press" or keypress["event"] == "up" and last_key_state ~= "repeat" then
         if not toggled then
             speed_timer:kill()
             mp.set_property("speed", original_speed)
-        else
-            evafast_speedup()
         end
-        if rewind then
-            mp.commandv("seek", -options.seek_distance)
-            mp.set_property("play-dir", "+")
-            rewinding = false
-        else
-            mp.commandv("seek", options.seek_distance)
-        end
-        flash_speed()
-    elseif keypress["event"] == "repeat" or keypress["event"] == "up" then
-        speedup = toggled or keypress["event"] == "repeat"
-        if toggled and keypress["event"] == "up" then
-            toggled_display = false
-        end
-        if speed_timer:is_enabled() then return end
-        if rewind then
-            mp.set_property("play-dir", "-")
-            rewinding = true
-        end
-        speed_timer.timeout = 0
-        speed_timer:resume()
-        speed_timer.timeout = options.speed_interval
+        flash_state()
+        ensure_timer()
+        mp.commandv("seek", options.seek_distance)
+    elseif keypress["event"] == "repeat" and last_key_state ~= "repeat" then
+        speedup = true
+        ensure_timer()
+    elseif keypress["event"] == "up" and not toggled then
+        evafast_slowdown(true)
+        ensure_timer(true)
     end
+
+    last_key_state = keypress["event"]
 end
 
 local function evafast_rewind(keypress)
@@ -288,6 +280,10 @@ end
 
 mp.observe_property("duration", "native", function(prop, val)
     file_duration = val or 0
+end)
+
+mp.observe_property("sub-start", "native", function(prop, val)
+    next_sub_at = -1
 end)
 
 mp.observe_property("sid", "native", function(prop, val)
@@ -318,7 +314,7 @@ mp.register_script_message("speedup-target", function(time)
         return
     end
     speedup_target = time
-    evafast_speedup(true)
+    evafast_speedup()
 end)
 
 mp.register_script_message("get-version", function(script)
@@ -340,7 +336,7 @@ end)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "evafast-rewind", evafast_rewind, {repeatable = true, complex = true})
-mp.add_key_binding(nil, "flash-speed", function() flash_speed(mp.get_property_number("speed", 1), nil, true) end)
+mp.add_key_binding(nil, "flash-speed", function() flash_state(mp.get_property_number("speed", 1), nil, true) end)
 mp.add_key_binding(nil, "speedup", evafast_speedup)
 mp.add_key_binding(nil, "slowdown", evafast_slowdown)
 mp.add_key_binding(nil, "toggle", evafast_toggle)
