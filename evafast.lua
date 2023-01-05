@@ -151,12 +151,13 @@ local function evafast_slowdown(display)
     end
     toggled = false
     speedup = false
+
+    ensure_timer()
 end
 
 local function evafast_toggle()
     if speedup then
         evafast_slowdown()
-        ensure_timer()
     else
         evafast_speedup(true)
     end
