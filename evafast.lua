@@ -213,6 +213,10 @@ local function adjust_speed()
                 evafast_slowdown()
             end
             speedup_target = nil
+            if rewinding then
+                mp.set_property("play-dir", "+")
+                rewinding = false
+            end
         end
         return
     end
@@ -241,6 +245,10 @@ speed_timer = mp.add_periodic_timer(100, adjust_speed)
 speed_timer:kill()
 
 local function evafast(keypress, rewind)
+    if rewinding and not rewind then
+        rewinding = false
+        mp.set_property("play-dir", "+")
+    end
     if keypress["event"] == "down" then
         if not speed_timer:is_enabled() then
             if not toggled then
@@ -263,10 +271,20 @@ local function evafast(keypress, rewind)
         end
         flash_state()
         ensure_timer()
-        mp.commandv("seek", options.seek_distance)
+        if rewind then
+            mp.commandv("seek", -options.seek_distance)
+            mp.set_property("play-dir", "+")
+            rewinding = false
+        else
+            mp.commandv("seek", options.seek_distance)
+        end
     elseif keypress["event"] == "repeat" and last_key_state ~= "repeat" then
         speedup = true
         ensure_timer()
+        if rewind then
+            mp.set_property("play-dir", "-")
+            rewinding = true
+        end
     elseif keypress["event"] == "up" and not toggled then
         evafast_slowdown(true)
         ensure_timer(true)
