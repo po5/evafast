@@ -283,16 +283,20 @@ mp.observe_property("duration", "native", function(prop, val)
     file_duration = val or 0
 end)
 
-mp.observe_property("sub-start", "native", function(prop, val)
-    next_sub_at = -1
-end)
-
 mp.observe_property("sid", "native", function(prop, val)
     has_subtitle = (val or 0) ~= 0
     next_sub_at = -1
 end)
 
+mp.observe_property("sub-start", "native", function(prop, val)
+    next_sub_at = -1
+end)
+
 mp.register_event("file-loaded", function()
+    next_sub_at = -1
+end)
+
+mp.register_event("seek", function()
     next_sub_at = -1
 end)
 
