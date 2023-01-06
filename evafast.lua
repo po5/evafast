@@ -131,7 +131,7 @@ local function ensure_timer(reset)
 end
 
 local function evafast_speedup(toggle)
-    if not toggled and not speed_timer:is_enabled() then
+    if not toggled and not speedup_target and not speed_timer:is_enabled() then
         original_speed = mp.get_property_number("speed", 1)
     end
 
@@ -206,7 +206,7 @@ local function adjust_speed()
     end
 
     if math.floor(target_speed * 1000) == math.floor(current_speed * 1000) then
-        if forced_slowdown or (not toggled and (not speedup or options.subs_speed_cap == options.speed_cap or not has_subtitle)) then
+        if forced_slowdown or (not toggled and (not speedup or options.subs_speed_cap == options.speed_cap or (not has_subtitle and not speedup_target))) then
             speed_timer:kill()
             toggled_display = true
             if speedup_target ~= nil then
@@ -251,7 +251,7 @@ local function evafast(keypress, rewind)
     end
     if keypress["event"] == "down" then
         if not speed_timer:is_enabled() then
-            if not toggled then
+            if not toggled and not speedup_target then
                 original_speed = mp.get_property_number("speed", 1)
             end
             flash_state(nil, "osd")
@@ -265,7 +265,7 @@ local function evafast(keypress, rewind)
     end
 
     if keypress["event"] == "press" or keypress["event"] == "up" and last_key_state ~= "repeat" then
-        if not toggled then
+        if not toggled and not speedup_target then
             speed_timer:kill()
             mp.set_property("speed", original_speed)
         end
@@ -285,7 +285,7 @@ local function evafast(keypress, rewind)
             mp.set_property("play-dir", "-")
             rewinding = true
         end
-    elseif keypress["event"] == "up" and not toggled then
+    elseif keypress["event"] == "up" and not toggled and not speedup_target then
         evafast_slowdown(true)
         ensure_timer(true)
     end
