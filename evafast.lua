@@ -54,6 +54,7 @@ local has_subtitle = true
 local speedup_target = nil
 local toggled_display = true
 local toggled = false
+local toggled_rewind = false
 local speedup = false
 local original_speed = 1
 local next_sub_at = -1
@@ -156,11 +157,19 @@ local function evafast_slowdown(display)
 end
 
 local function evafast_toggle()
+    toggled_rewind = false
     if speedup then
         evafast_slowdown()
     else
         evafast_speedup(true)
     end
+end
+
+local function evafast_toggle_rewind()
+    rewinding = not speedup
+    mp.set_property("play-dir", rewinding and "-" or "+")
+    evafast_toggle()
+    toggled_rewind = rewinding
 end
 
 local function adjust_speed()
@@ -213,10 +222,6 @@ local function adjust_speed()
                 evafast_slowdown()
             end
             speedup_target = nil
-            if rewinding then
-                mp.set_property("play-dir", "+")
-                rewinding = false
-            end
         end
         return
     end
@@ -245,10 +250,11 @@ speed_timer = mp.add_periodic_timer(100, adjust_speed)
 speed_timer:kill()
 
 local function evafast(keypress, rewind)
-    if rewinding and not rewind then
+    if rewinding and not toggled_rewind and (not rewind or (keypress["event"] == "up" and last_key_state ~= "down")) then
         rewinding = false
         mp.set_property("play-dir", "+")
     end
+
     if keypress["event"] == "down" then
         if not speed_timer:is_enabled() then
             if not toggled and not speedup_target then
@@ -272,9 +278,11 @@ local function evafast(keypress, rewind)
         flash_state()
         ensure_timer()
         if rewind then
+            if not toggled_rewind then
+                rewinding = false
+                mp.set_property("play-dir", "+") -- unnecessary in some cases
+            end
             mp.commandv("seek", -options.seek_distance)
-            mp.set_property("play-dir", "+")
-            rewinding = false
         else
             mp.commandv("seek", options.seek_distance)
         end
@@ -363,5 +371,6 @@ mp.add_key_binding(nil, "flash-speed", function() flash_state(mp.get_property_nu
 mp.add_key_binding(nil, "speedup", evafast_speedup)
 mp.add_key_binding(nil, "slowdown", evafast_slowdown)
 mp.add_key_binding(nil, "toggle", evafast_toggle)
+mp.add_key_binding(nil, "toggle-rewind", evafast_toggle_rewind)
 
 mp.commandv("script-message-to", "uosc", "get-version", mp.get_script_name())
