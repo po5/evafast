@@ -72,7 +72,12 @@ local function speed_transition(current_speed, target_speed)
 
     while adjusted_speed ~= target_speed do
         time_for_correction = time_for_correction + options.speed_interval * adjusted_speed
-        adjusted_speed = adjusted_speed + speed_correction
+
+        if options.multiply_modifier then
+            adjusted_speed = adjusted_speed + adjusted_speed * speed_correction
+        else
+            adjusted_speed = adjusted_speed + speed_correction
+        end
 
         if (current_speed < target_speed and adjusted_speed > target_speed) or (current_speed > target_speed and adjusted_speed < target_speed) then
             adjusted_speed = target_speed
