@@ -64,13 +64,21 @@ local file_duration = 0
 local last_key_state = "up"
 
 local function speed_transition(current_speed, target_speed)
-    local speed_correction = current_speed >= target_speed and options.speed_decrease or options.speed_increase
+    local speed_correction = current_speed >= target_speed and -options.speed_decrease or options.speed_increase
 
-    if speed_correction == 0 then
-        return 0
+    local time_for_correction = 0
+    local adjusted_speed = current_speed
+
+    while adjusted_speed ~= target_speed do
+        time_for_correction = time_for_correction + options.speed_interval * adjusted_speed
+        adjusted_speed = adjusted_speed + speed_correction
+
+        if (current_speed < target_speed and adjusted_speed > target_speed) or (current_speed > target_speed and adjusted_speed < target_speed) then
+            adjusted_speed = target_speed
+        end
     end
 
-    return math.ceil(math.abs(target_speed - current_speed) / speed_correction) * options.speed_interval
+    return time_for_correction
 end
 
 local function next_sub(current_time)
@@ -190,7 +198,7 @@ local function adjust_speed()
                     next_sub_at = next_sub(current_time)
                 end
                 if target_speed ~= options.subs_speed_cap and next_sub_at > current_time then
-                    local time_for_correction = speed_transition(options.speed_cap, options.subs_speed_cap) * target_speed
+                    local time_for_correction = speed_transition(options.speed_cap, options.subs_speed_cap)
                     if current_time + time_for_correction >= next_sub_at then
                         target_speed = options.subs_speed_cap
                     end
@@ -204,7 +212,7 @@ local function adjust_speed()
             if current_time >= effective_speedup_target then
                 evafast_slowdown()
             else
-                local time_for_correction = speed_transition(current_speed, original_speed) * current_speed
+                local time_for_correction = speed_transition(current_speed, original_speed)
                 if current_time + time_for_correction > effective_speedup_target or forced_slowdown then
                     forced_slowdown = true
                     speedup = false
