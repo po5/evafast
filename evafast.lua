@@ -166,6 +166,9 @@ local function evafast_slowdown(display)
 end
 
 local function evafast_toggle()
+    if toggled_rewind then
+        mp.set_property("play-dir", "+")
+    end
     toggled_rewind = false
     if speedup then
         evafast_slowdown()
