@@ -208,9 +208,7 @@ local function adjust_speed()
 
             if sub_displayed then
                 target_speed = options.subs_speed_cap
-            end
-
-            if options.subs_lookahead then
+            elseif options.subs_lookahead then
                 if next_sub_at < current_time and next_sub_at ~= -2 then
                     next_sub_at = next_sub(current_time)
                 end
