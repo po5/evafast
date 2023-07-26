@@ -8,6 +8,7 @@
 -- Adjust --input-ar-delay to define when to start fastforwarding.
 -- Define --hr-seek if you want accurate seeking.
 -- If you just want a nicer fastforward.lua without hybrid key behavior, set seek_distance to 0.
+-- Consider setting --sub-filter-regex=^\s*$ (or --sub-filter-jsre on Windows) to ignore empty lines.
 
 local options = {
     -- How far to jump on press, set to 0 to disable seeking and force fastforward
@@ -51,7 +52,6 @@ mp.options.read_options(options, "evafast")
 
 local uosc_available = false
 local has_subtitle = true
-local has_text_subtitle = false
 local speedup_target = nil
 local toggled_display = true
 local toggled = false
@@ -198,13 +198,7 @@ local function adjust_speed()
         target_speed = options.speed_cap
 
         if has_subtitle and target_speed ~= options.subs_speed_cap then
-            local sub_displayed
-
-            if has_text_subtitle then
-                sub_displayed = mp.get_property("sub-text", "") ~= ""
-            else
-                sub_displayed = mp.get_property("sub-start") ~= nil
-            end
+            local sub_displayed = mp.get_property("sub-start") ~= nil
 
             if sub_displayed then
                 target_speed = options.subs_speed_cap
@@ -330,10 +324,6 @@ end
 
 mp.observe_property("duration", "native", function(prop, val)
     file_duration = val or 0
-end)
-
-mp.observe_property("current-tracks/sub/codec", "native", function(prop, val)
-    has_text_subtitle = val ~= nil and val ~= "hdmv_pgs_subtitle" and val ~= "dvd_subtitle" and val ~= "dvb_subtitle"
 end)
 
 mp.observe_property("sid", "native", function(prop, val)
