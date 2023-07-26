@@ -237,7 +237,7 @@ local function adjust_speed()
         end
     end
 
-    if math.floor(target_speed * 1000) == math.floor(current_speed * 1000) then
+    if math.floor(target_speed * 1000 + 0.5) == math.floor(current_speed * 1000 + 0.5) then
         if forced_slowdown or (not toggled and (not speedup or options.subs_speed_cap == options.speed_cap or (not has_subtitle and not speedup_target))) then
             speed_timer:kill()
             toggled_display = true
