@@ -8,7 +8,7 @@
 -- Adjust --input-ar-delay to define when to start fastforwarding.
 -- Define --hr-seek if you want accurate seeking.
 -- If you just want a nicer fastforward.lua without hybrid key behavior, set seek_distance to 0.
--- Consider setting --sub-filter-regex=^\s*$ (or --sub-filter-jsre on Windows) to ignore empty lines.
+-- Consider setting --sub-filter-regex="\`\s*\'" (on Linux) to ignore empty lines.
 
 local options = {
     -- How far to jump on press, set to 0 to disable seeking and force fastforward
