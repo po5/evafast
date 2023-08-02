@@ -126,6 +126,9 @@ local function flash_state(current_speed, display, forced)
         if uosc_show then
             mp.command("script-binding uosc/flash-speed")
         elseif osd_show then
+            if current_speed == true then
+                current_speed = mp.get_property_number("speed", 1)
+            end
             mp.osd_message(string.format("▶▶ x%.1f", current_speed))
         end
     elseif not current_speed and options.show_seek then
@@ -384,7 +387,7 @@ end)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
 mp.add_key_binding(nil, "evafast-rewind", evafast_rewind, {repeatable = true, complex = true})
-mp.add_key_binding(nil, "flash-speed", function() flash_state(mp.get_property_number("speed", 1), nil, true) end)
+mp.add_key_binding(nil, "flash-speed", function() flash_state(true, nil, true) end)
 mp.add_key_binding(nil, "speedup", evafast_speedup)
 mp.add_key_binding(nil, "slowdown", evafast_slowdown)
 mp.add_key_binding(nil, "toggle", evafast_toggle)
