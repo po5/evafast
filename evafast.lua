@@ -48,7 +48,7 @@ local options = {
 }
 
 mp.options = require "mp.options"
-mp.options.read_options(options, "evafast")
+mp.options.read_options(options, "evafast", function() end)
 
 local uosc_available = false
 local has_subtitle = true
@@ -370,19 +370,6 @@ end)
 
 mp.register_script_message("get-version", function(script)
     mp.commandv("script-message-to", script, "evafast-version", "2.0")
-end)
-
-mp.register_script_message("set-option", function(option, value)
-    if options[option] == nil then return end
-    value_type = type(options[option])
-
-    if value_type == "number" then
-        options[option] = tonumber(value) or options[option]
-    elseif value_type == "boolean" then
-        options[option] = ((tonumber(value) or 0) > 0)
-    else
-        options[option] = value
-    end
 end)
 
 mp.add_key_binding("RIGHT", "evafast", evafast, {repeatable = true, complex = true})
