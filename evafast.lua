@@ -46,8 +46,9 @@ local options = {
     -- Look ahead for smoother transition when subs_speed_cap is set
     subs_lookahead = true,
 
-    -- Symbol prepended to the osd message
-    osd_symbol = "{\\fnmpv-osd-symbols} {\\r}"
+    -- Symbols prepended to the osd message
+    osd_symbol = "{\\fnmpv-osd-symbols} {\\r}",
+    osd_rewind = "{\\fnmpv-osd-symbols} {\\r}"
 }
 
 mp.options = require "mp.options"
@@ -66,6 +67,7 @@ local rewinding = false
 local forced_slowdown = false
 local file_duration = 0
 local last_key_state = "up"
+local was_rewinding = false
 
 local ass_start = mp.get_property_osd("osd-ass-cc/0")
 local ass_stop = mp.get_property_osd("osd-ass-cc/1")
@@ -135,13 +137,13 @@ local function flash_state(current_speed, display, forced)
             if current_speed == true then
                 current_speed = mp.get_property_number("speed", 1)
             end
-            mp.osd_message(ass_start .. options.osd_symbol .. ass_stop .. string.format("x%.1f", current_speed))
+            mp.osd_message(ass_start .. (was_rewinding and options.osd_rewind or options.osd_symbol) .. ass_stop .. string.format("x%.1f", current_speed))
         end
     elseif not current_speed and options.show_seek then
         if uosc_show then
             mp.command("script-binding uosc/flash-timeline")
         elseif osd_show then
-            mp.osd_message(ass_start .. options.osd_symbol)
+            mp.osd_message(ass_start .. (was_rewinding and options.osd_rewind or options.osd_symbol))
         end
     end
 end
@@ -276,9 +278,14 @@ speed_timer = mp.add_periodic_timer(100, adjust_speed)
 speed_timer:kill()
 
 local function evafast(keypress, rewind)
+    was_rewinding = false
     if rewinding and not toggled_rewind and (not rewind or (keypress["event"] == "up" and last_key_state ~= "down")) then
         rewinding = false
+        was_rewinding = true
         mp.set_property("play-dir", "+")
+    end
+    if rewind then
+        was_rewinding = true
     end
 
     if keypress["event"] == "down" then
